@@ -1,9 +1,14 @@
-import docker
 import pytest
 import time
-from docker.models.containers import Container
 from importlib.util import find_spec
 from typing import Dict, Generator, Union
+
+try:
+    import docker
+    from docker.models.containers import Container
+except Exception:
+    docker = None  # type: ignore[assignment]
+    Container = object  # type: ignore[assignment]
 
 from llama_index.storage.kvstore.postgres import PostgresKVStore
 
@@ -24,12 +29,20 @@ def postgres_container() -> Generator[Dict[str, Union[str, Container]], None, No
     }
     # Let Docker choose available port
     postgres_ports = {"5432/tcp": None}
+
+    if docker is None:
+        pytest.skip("docker Python package is not installed for Postgres tests")
+
     container = None
     client = None
 
     try:
-        # Initialize Docker client
-        client = docker.from_env()
+        # Initialize Docker client and verify connectivity
+        try:
+            client = docker.from_env()
+            client.ping()
+        except Exception as e:
+            pytest.skip(f"Docker is not available for Postgres tests: {e}")
 
         # Run PostgreSQL container
         container = client.containers.run(
